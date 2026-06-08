@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Settings, Calendar, Utensils, Database } from 'lucide-react'
+import { Settings, Calendar, Utensils, Database, ChevronUp, ChevronDown } from 'lucide-react'
 import {
   ensureSeeded,
   getSettings,
@@ -10,6 +10,11 @@ import {
   resetAllData,
   DEFAULT_MEAL_SLOTS,
 } from '../lib/db'
+import {
+  generateSlotId,
+  formatTimeDisplay,
+  type MealSlot,
+} from '../lib/mealSlots'
 import { getDayNumber, getPhaseForDay } from '../lib/phases'
 import { evaluateAchievements } from '../lib/achievements'
 import { useToastStore } from '../store/toastStore'
@@ -22,7 +27,8 @@ export function SettingsPage() {
   const showToast = useToastStore((s) => s.show)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [confirmReset, setConfirmReset] = useState(false)
-  const [newSlot, setNewSlot] = useState('')
+  const [newSlotName, setNewSlotName] = useState('')
+  const [newSlotTime, setNewSlotTime] = useState('12:00')
   const [startDateWarning, setStartDateWarning] = useState(false)
 
   const settings = useLiveQuery(async () => {
@@ -78,26 +84,39 @@ export function SettingsPage() {
     showToast('All data reset')
   }
 
-  const addMealSlot = async () => {
-    const trimmed = newSlot.trim()
-    if (!trimmed || settings.mealSlots.includes(trimmed)) return
-    await updateSettings({ mealSlots: [...settings.mealSlots, trimmed] })
-    setNewSlot('')
+  const updateSlot = async (index: number, patch: Partial<MealSlot>) => {
+    const next = settings.mealSlots.map((s, i) =>
+      i === index ? { ...s, ...patch } : s,
+    )
+    await updateSettings({ mealSlots: next })
   }
 
-  const removeMealSlot = async (slot: string) => {
+  const moveSlot = async (index: number, direction: -1 | 1) => {
+    const next = [...settings.mealSlots]
+    const target = index + direction
+    if (target < 0 || target >= next.length) return
+    ;[next[index], next[target]] = [next[target], next[index]]
+    await updateSettings({ mealSlots: next })
+  }
+
+  const removeMealSlot = async (index: number) => {
     if (settings.mealSlots.length <= 1) return
     await updateSettings({
-      mealSlots: settings.mealSlots.filter((s) => s !== slot),
+      mealSlots: settings.mealSlots.filter((_, i) => i !== index),
     })
   }
 
-  const renameMealSlot = async (oldSlot: string, newName: string) => {
-    const trimmed = newName.trim()
+  const addMealSlot = async () => {
+    const trimmed = newSlotName.trim()
     if (!trimmed) return
-    await updateSettings({
-      mealSlots: settings.mealSlots.map((s) => (s === oldSlot ? trimmed : s)),
-    })
+    const slot: MealSlot = {
+      id: generateSlotId(trimmed),
+      name: trimmed,
+      time: newSlotTime,
+    }
+    await updateSettings({ mealSlots: [...settings.mealSlots, slot] })
+    setNewSlotName('')
+    setNewSlotTime('12:00')
   }
 
   return (
@@ -112,10 +131,7 @@ export function SettingsPage() {
       </header>
 
       <Card>
-        <SectionHeader
-          icon={<Calendar size={18} strokeWidth={2.25} />}
-          title="Program"
-        />
+        <SectionHeader icon={<Calendar size={18} strokeWidth={2.25} />} title="Program" />
         <div className="space-y-4">
           <div>
             <label className="mb-2 block text-sm font-semibold text-foreground">
@@ -159,37 +175,71 @@ export function SettingsPage() {
       </Card>
 
       <Card>
-        <SectionHeader
-          icon={<Utensils size={18} strokeWidth={2.25} />}
-          title="Meal slots"
-        />
-        <div className="space-y-2">
-          {settings.mealSlots.map((slot) => (
-            <div key={slot} className="flex items-center gap-2">
-              <input
-                type="text"
-                defaultValue={slot}
-                onBlur={(e) => renameMealSlot(slot, e.target.value)}
-                className="min-h-[48px] flex-1 rounded-full bg-surface-muted px-4 text-sm font-medium text-foreground outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => removeMealSlot(slot)}
-                disabled={settings.mealSlots.length <= 1}
-                className="rounded-full px-4 py-2 text-xs font-semibold text-danger disabled:opacity-30"
-              >
-                Remove
-              </button>
+        <SectionHeader icon={<Utensils size={18} strokeWidth={2.25} />} title="Meal slots" />
+        <div className="space-y-3">
+          {settings.mealSlots.map((slot, index) => (
+            <div key={slot.id} className="rounded-2xl bg-surface-muted/60 p-3">
+              <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-0.5">
+                  <button
+                    type="button"
+                    disabled={index === 0}
+                    onClick={() => moveSlot(index, -1)}
+                    className="rounded p-0.5 text-muted disabled:opacity-30"
+                    aria-label="Move up"
+                  >
+                    <ChevronUp size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={index === settings.mealSlots.length - 1}
+                    onClick={() => moveSlot(index, 1)}
+                    className="rounded p-0.5 text-muted disabled:opacity-30"
+                    aria-label="Move down"
+                  >
+                    <ChevronDown size={16} />
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  defaultValue={slot.name}
+                  onBlur={(e) => updateSlot(index, { name: e.target.value.trim() || slot.name })}
+                  className="min-h-[44px] flex-1 rounded-full bg-white px-4 text-sm font-medium text-foreground outline-none"
+                />
+                <input
+                  type="time"
+                  value={slot.time}
+                  onChange={(e) => updateSlot(index, { time: e.target.value })}
+                  className="min-h-[44px] w-[7.5rem] rounded-full bg-white px-2 text-sm font-medium text-foreground outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeMealSlot(index)}
+                  disabled={settings.mealSlots.length <= 1}
+                  className="shrink-0 rounded-full px-3 py-2 text-xs font-semibold text-danger disabled:opacity-30"
+                >
+                  Remove
+                </button>
+              </div>
+              <p className="mt-1 pl-9 text-[11px] font-medium text-muted">
+                Displays as {slot.name} · {formatTimeDisplay(slot.time)}
+              </p>
             </div>
           ))}
         </div>
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           <input
             type="text"
-            value={newSlot}
-            onChange={(e) => setNewSlot(e.target.value)}
+            value={newSlotName}
+            onChange={(e) => setNewSlotName(e.target.value)}
             placeholder="New slot name"
-            className="min-h-[48px] flex-1 rounded-full bg-surface-muted px-4 text-sm font-medium text-foreground outline-none placeholder:text-muted"
+            className="min-h-[48px] min-w-[140px] flex-1 rounded-full bg-surface-muted px-4 text-sm font-medium text-foreground outline-none placeholder:text-muted"
+          />
+          <input
+            type="time"
+            value={newSlotTime}
+            onChange={(e) => setNewSlotTime(e.target.value)}
+            className="min-h-[48px] rounded-full bg-surface-muted px-3 text-sm font-medium text-foreground outline-none"
           />
           <button
             type="button"
@@ -201,7 +251,9 @@ export function SettingsPage() {
         </div>
         <button
           type="button"
-          onClick={() => updateSettings({ mealSlots: [...DEFAULT_MEAL_SLOTS] })}
+          onClick={() =>
+            updateSettings({ mealSlots: DEFAULT_MEAL_SLOTS.map((s) => ({ ...s })) })
+          }
           className="mt-3 text-xs font-medium text-muted"
         >
           Reset to defaults
@@ -209,15 +261,10 @@ export function SettingsPage() {
       </Card>
 
       <Card>
-        <SectionHeader
-          icon={<Database size={18} strokeWidth={2.25} />}
-          title="Data"
-        />
+        <SectionHeader icon={<Database size={18} strokeWidth={2.25} />} title="Data" />
         <div className="space-y-2">
           <ActionButton onClick={handleExport}>Export data</ActionButton>
-          <ActionButton onClick={() => fileInputRef.current?.click()}>
-            Import data
-          </ActionButton>
+          <ActionButton onClick={() => fileInputRef.current?.click()}>Import data</ActionButton>
           <input
             ref={fileInputRef}
             type="file"

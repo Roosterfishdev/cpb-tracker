@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   LineChart,
@@ -17,23 +17,33 @@ import {
   getPhaseForDay,
   dayNumberToDateKey,
 } from '../lib/phases'
-import { isDayCompliant } from '../lib/compliance'
+import { isDayCompliant, countOnPlanMeals } from '../lib/compliance'
 import { evaluateAchievements, getAchievementById } from '../lib/achievements'
 import { useToastStore } from '../store/toastStore'
 import { Card } from '../components/Card'
 import { SectionHeader } from '../components/SectionHeader'
 import { ComplianceBarChart } from '../components/ComplianceBarChart'
 import { ExerciseDonutChart } from '../components/ExerciseDonutChart'
+import { CheckinHistory } from '../components/CheckinHistory'
 import { format } from 'date-fns'
+
+interface CheckinForm {
+  weight: string
+  energy?: 1 | 2 | 3 | 4 | 5
+  cravings?: 1 | 2 | 3 | 4 | 5
+  mood?: 1 | 2 | 3 | 4 | 5
+}
 
 function RatingSelector({
   label,
   value,
   onChange,
+  disabled,
 }: {
   label: string
   value?: number
   onChange: (v: 1 | 2 | 3 | 4 | 5) => void
+  disabled?: boolean
 }) {
   return (
     <div>
@@ -43,12 +53,13 @@ function RatingSelector({
           <button
             key={n}
             type="button"
+            disabled={disabled}
             onClick={() => onChange(n)}
             className={`min-h-[44px] flex-1 rounded-full text-sm font-bold transition-all ${
               value === n
                 ? 'bg-accent text-foreground shadow-sm'
                 : 'bg-surface-muted text-muted'
-            }`}
+            } ${disabled ? 'opacity-60' : ''}`}
           >
             {n}
           </button>
@@ -58,15 +69,47 @@ function RatingSelector({
   )
 }
 
+function checkinToForm(c?: {
+  weight?: number
+  energy?: 1 | 2 | 3 | 4 | 5
+  cravings?: 1 | 2 | 3 | 4 | 5
+  mood?: 1 | 2 | 3 | 4 | 5
+}): CheckinForm {
+  return {
+    weight: c?.weight != null ? String(c.weight) : '',
+    energy: c?.energy,
+    cravings: c?.cravings,
+    mood: c?.mood,
+  }
+}
+
+function formHasValue(form: CheckinForm): boolean {
+  return (
+    form.weight !== '' ||
+    form.energy != null ||
+    form.cravings != null ||
+    form.mood != null
+  )
+}
+
+function hasSavedCheckin(c?: {
+  weight?: number
+  energy?: number
+  cravings?: number
+  mood?: number
+}): boolean {
+  if (!c) return false
+  return c.weight != null || c.energy != null || c.cravings != null || c.mood != null
+}
+
 export function ProgressPage() {
   const today = todayKey()
   const showToast = useToastStore((s) => s.show)
 
-  useEffect(() => {
-    if (window.location.hash === '#check-in') {
-      document.getElementById('check-in')?.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [])
+  const [form, setForm] = useState<CheckinForm>({ weight: '' })
+  const [isEditing, setIsEditing] = useState(true)
+  const [savedFlash, setSavedFlash] = useState(false)
+  const checkinLoadedRef = useRef(false)
 
   const settings = useLiveQuery(async () => {
     await ensureSeeded()
@@ -79,6 +122,28 @@ export function ProgressPage() {
 
   const weekKeys = getLastNDays(7)
 
+  useEffect(() => {
+    checkinLoadedRef.current = false
+    setForm({ weight: '' })
+    setIsEditing(true)
+    setSavedFlash(false)
+  }, [today])
+
+  useEffect(() => {
+    if (checkin === undefined || checkinLoadedRef.current) return
+    checkinLoadedRef.current = true
+    if (hasSavedCheckin(checkin)) {
+      setForm(checkinToForm(checkin))
+      setIsEditing(false)
+    }
+  }, [checkin, today])
+
+  useEffect(() => {
+    if (window.location.hash === '#check-in') {
+      document.getElementById('check-in')?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [])
+
   const runAchievements = useCallback(async () => {
     const earned = await evaluateAchievements()
     for (const id of earned) {
@@ -87,13 +152,18 @@ export function ProgressPage() {
     }
   }, [showToast])
 
-  const handleCheckinUpdate = useCallback(
-    async (data: Parameters<typeof upsertCheckin>[1]) => {
-      await upsertCheckin(today, data)
-      await runAchievements()
-    },
-    [today, runAchievements],
-  )
+  const handleSave = useCallback(async () => {
+    await upsertCheckin(today, {
+      weight: form.weight ? Number(form.weight) : undefined,
+      energy: form.energy,
+      cravings: form.cravings,
+      mood: form.mood,
+    })
+    await runAchievements()
+    setIsEditing(false)
+    setSavedFlash(true)
+    setTimeout(() => setSavedFlash(false), 2000)
+  }, [today, form, runAchievements])
 
   const complianceBars = useLiveQuery(async () => {
     if (!settings) return []
@@ -101,10 +171,7 @@ export function ProgressPage() {
     for (const key of weekKeys) {
       const meals = await db.meals.where('date').equals(key).toArray()
       const mealMap = new Map(meals.map((m) => [m.slot, m]))
-      const onPlanCount = settings.mealSlots.filter((slot) => {
-        const m = mealMap.get(slot)
-        return m?.eaten && m?.onPlan && !m?.skipped
-      }).length
+      const onPlanCount = countOnPlanMeals(settings.mealSlots, mealMap)
       bars.push({
         label: format(new Date(key + 'T12:00:00'), 'EEE'),
         count: onPlanCount,
@@ -112,7 +179,7 @@ export function ProgressPage() {
       })
     }
     return bars
-  }, [weekKeys.join(','), settings?.mealSlots.join(','), today])
+  }, [weekKeys.join(','), settings?.mealSlots.map((s) => s.id).join(','), today])
 
   const weekSummary = useLiveQuery(async () => {
     if (!settings) return null
@@ -179,6 +246,7 @@ export function ProgressPage() {
   const dayNumber = getDayNumber(settings.startDate)
   const phase = getPhaseForDay(dayNumber)
   const maxSlots = settings.mealSlots.length
+  const canSave = isEditing && formHasValue(form)
 
   return (
     <div className="space-y-5 px-5 pb-6 pt-4">
@@ -188,72 +256,6 @@ export function ProgressPage() {
           Phase {phase.id} · {phase.label}
         </p>
       </header>
-
-      <Card id="check-in">
-        <SectionHeader
-          icon={<Scale size={18} strokeWidth={2.25} />}
-          title="Daily check-in"
-          subtitle="Weight & wellbeing"
-        />
-        <div className="space-y-5">
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-foreground">
-              Weight ({settings.weightUnit})
-            </label>
-            <input
-              type="number"
-              step="0.1"
-              value={checkin?.weight ?? ''}
-              onChange={(e) =>
-                handleCheckinUpdate({
-                  weight: e.target.value ? Number(e.target.value) : undefined,
-                  energy: checkin?.energy,
-                  cravings: checkin?.cravings,
-                  mood: checkin?.mood,
-                })
-              }
-              className="w-full min-h-[48px] rounded-full bg-surface-muted px-4 text-sm font-medium text-foreground outline-none placeholder:text-muted"
-              placeholder="Optional"
-            />
-          </div>
-          <RatingSelector
-            label="Energy"
-            value={checkin?.energy}
-            onChange={(energy) =>
-              handleCheckinUpdate({
-                weight: checkin?.weight,
-                energy,
-                cravings: checkin?.cravings,
-                mood: checkin?.mood,
-              })
-            }
-          />
-          <RatingSelector
-            label="Cravings"
-            value={checkin?.cravings}
-            onChange={(cravings) =>
-              handleCheckinUpdate({
-                weight: checkin?.weight,
-                energy: checkin?.energy,
-                cravings,
-                mood: checkin?.mood,
-              })
-            }
-          />
-          <RatingSelector
-            label="Mood"
-            value={checkin?.mood}
-            onChange={(mood) =>
-              handleCheckinUpdate({
-                weight: checkin?.weight,
-                energy: checkin?.energy,
-                cravings: checkin?.cravings,
-                mood,
-              })
-            }
-          />
-        </div>
-      </Card>
 
       <Card>
         <SectionHeader
@@ -320,6 +322,72 @@ export function ProgressPage() {
         )}
       </Card>
 
+      <Card id="check-in">
+        <SectionHeader
+          icon={<Scale size={18} strokeWidth={2.25} />}
+          title="Daily check-in"
+          subtitle="Weight & wellbeing"
+        />
+        <div className="space-y-5">
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-foreground">
+              Weight ({settings.weightUnit})
+            </label>
+            <input
+              type="number"
+              step="0.1"
+              value={form.weight}
+              disabled={!isEditing}
+              onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}
+              className="w-full min-h-[48px] rounded-full bg-surface-muted px-4 text-sm font-medium text-foreground outline-none placeholder:text-muted disabled:opacity-70"
+              placeholder="Optional"
+            />
+          </div>
+          <RatingSelector
+            label="Energy"
+            value={form.energy}
+            disabled={!isEditing}
+            onChange={(energy) => setForm((f) => ({ ...f, energy }))}
+          />
+          <RatingSelector
+            label="Cravings"
+            value={form.cravings}
+            disabled={!isEditing}
+            onChange={(cravings) => setForm((f) => ({ ...f, cravings }))}
+          />
+          <RatingSelector
+            label="Mood"
+            value={form.mood}
+            disabled={!isEditing}
+            onChange={(mood) => setForm((f) => ({ ...f, mood }))}
+          />
+
+          <div className="flex items-center gap-3">
+            {canSave && (
+              <button
+                type="button"
+                onClick={handleSave}
+                className="min-h-[48px] flex-1 rounded-full bg-accent text-sm font-bold text-foreground shadow-sm"
+              >
+                Save check-in
+              </button>
+            )}
+            {!isEditing && hasSavedCheckin(checkin) && (
+              <button
+                type="button"
+                onClick={() => setIsEditing(true)}
+                className="min-h-[48px] flex-1 rounded-full bg-surface-muted text-sm font-bold text-foreground"
+              >
+                Edit
+              </button>
+            )}
+          </div>
+          {savedFlash && (
+            <p className="text-center text-sm font-bold text-accent-deep">Saved</p>
+          )}
+        </div>
+      </Card>
+
       <Card>
         <SectionHeader
           icon={<Activity size={18} strokeWidth={2.25} />}
@@ -343,6 +411,8 @@ export function ProgressPage() {
           </div>
         </Card>
       )}
+
+      <CheckinHistory weightUnit={settings.weightUnit} today={today} />
     </div>
   )
 }

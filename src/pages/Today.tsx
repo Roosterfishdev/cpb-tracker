@@ -10,6 +10,7 @@ import {
   getAllowedFoods,
   getDaysRemainingInPhase,
 } from '../lib/phases'
+import { getMealComplianceSummary } from '../lib/compliance'
 import { PhaseCard } from '../components/PhaseCard'
 import { MealsCard } from '../components/MealRow'
 import { ExerciseCard } from '../components/ExerciseCard'
@@ -24,19 +25,6 @@ function useDebouncedSave(value: string, onSave: (v: string) => void, delay = 50
     const timer = setTimeout(() => onSave(value), delay)
     return () => clearTimeout(timer)
   }, [value, onSave, delay])
-}
-
-function computeMealCompliance(
-  mealSlots: string[],
-  mealMap: Map<string, { eaten?: boolean; onPlan?: boolean; skipped?: boolean } | undefined>,
-) {
-  const total = mealSlots.length
-  const onPlanCount = mealSlots.filter((slot) => {
-    const m = mealMap.get(slot)
-    return m?.eaten && m?.onPlan && !m?.skipped
-  }).length
-  const percent = total > 0 ? Math.round((onPlanCount / total) * 100) : 0
-  return { onPlanCount, total, percent }
 }
 
 export function TodayPage() {
@@ -97,8 +85,8 @@ export function TodayPage() {
   useDebouncedSave(notes, saveNotes)
 
   const handleMealUpdate = useCallback(
-    async (slot: string, updates: Parameters<typeof upsertMeal>[2]) => {
-      await upsertMeal(today, slot, updates)
+    async (slotId: string, updates: Parameters<typeof upsertMeal>[2]) => {
+      await upsertMeal(today, slotId, updates)
       await runAchievements()
     },
     [today, runAchievements],
@@ -131,7 +119,7 @@ export function TodayPage() {
   const daysRemaining = getDaysRemainingInPhase(dayNumber)
 
   const mealMap = new Map((meals ?? []).map((m) => [m.slot, m]))
-  const { onPlanCount, total, percent } = computeMealCompliance(
+  const { onPlanCount, total, percent } = getMealComplianceSummary(
     settings.mealSlots,
     mealMap,
   )
@@ -140,7 +128,6 @@ export function TodayPage() {
 
   return (
     <div className="space-y-5 px-5 pb-6 pt-4">
-      {/* Top bar */}
       <header className="relative flex items-center justify-between">
         <span className="rounded-full bg-surface px-3.5 py-1.5 text-xs font-bold text-foreground shadow-card">
           Today · {datePill}
@@ -168,7 +155,6 @@ export function TodayPage() {
         </div>
       </header>
 
-      {/* Hero compliance gauge */}
       <div className="hero-gradient rounded-card px-5 py-6 shadow-card">
         <div className="flex flex-col items-center">
           <CircularGauge percent={percent} size={168} strokeWidth={14}>
@@ -190,6 +176,7 @@ export function TodayPage() {
       />
 
       <MealsCard
+        date={today}
         mealSlots={settings.mealSlots}
         meals={mealMap}
         onUpdate={handleMealUpdate}
