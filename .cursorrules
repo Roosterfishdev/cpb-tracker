@@ -1,0 +1,40 @@
+You are building "CPB Tracker", a single-user personal PWA for tracking a 90-day CPB diet (Chicken/Potato/Broccoli reset by Jeremy Ethier) with phased food reintroduction.
+
+STACK (do not deviate without asking):
+- Vite + React 18 + TypeScript
+- Tailwind CSS for all styling
+- Dexie (IndexedDB) for ALL persistence — no backend, no auth, no API calls
+- vite-plugin-pwa for installable offline PWA
+- date-fns for all date math
+- recharts for the weight trend chart
+- zustand only for ephemeral UI state (not persisted data)
+
+PRINCIPLES:
+- Single user. No login, no accounts, no multi-tenant anything.
+- Local-first: everything works offline. Data lives in IndexedDB.
+- Mobile-first UI. This lives on a phone home screen. Big tap targets, thumb-reachable bottom nav.
+- Clean, calm, legible. Dark UI is fine. No clutter.
+- Dates are stored and keyed as 'yyyy-MM-dd' strings (local date, NOT UTC ISO timestamps) to avoid timezone drift on daily logs.
+
+DOMAIN — PHASES (cumulative allowed foods, computed from startDate):
+Phase 1, days 1-28, "Strict Reset": chicken breast, potatoes, broccoli, carrots, 2 eggs/day, 1 tbsp olive oil/day.
+Phase 2, days 29-35, "Veg & Fruit": + leafy greens, peppers, zucchini, cauliflower, green beans, tomato, berries, banana.
+Phase 3, days 36-42, "Fish & Protein": + salmon, sardines, mackerel, turkey, lean beef.
+Phase 4, days 43-49, "Fats & Calcium": + nuts, seeds, avocado, olives, Greek yogurt, cottage cheese, milk, cheese; relaxed olive oil.
+Phase 5, days 50-56, "Carb Variety": + rice, oats, quinoa, beans, lentils, sweet potato, whole grains.
+Phase 6, days 57-90, "Integration": + dark chocolate and treats, reintroduced deliberately.
+Global rules shown as reminders: no liquid calories, no diet sodas, no artificial sweeteners; seasoning + sugar-free sauces OK.
+
+DOMAIN — DATA MODEL (Dexie tables):
+- settings: { id: 1, startDate: 'yyyy-MM-dd', weightUnit: 'kg' | 'lb', mealSlots: string[] }  (single row)
+- days: { date: 'yyyy-MM-dd' (PK), notes?: string }
+- meals: { id, date, slot, eaten: boolean, onPlan: boolean }  (one row per meal slot per day)
+- exercise: { id, date, didExercise: boolean, type?: 'walking'|'padel'|'boxing'|'gym'|'other', minutes?: number, note?: string }
+- checkins: { date (PK), weight?: number, energy?: 1-5, cravings?: 1-5, mood?: 1-5 }
+- achievements: { id (string PK), earnedAt?: 'yyyy-MM-dd' | null }
+
+Default mealSlots: ['Breakfast', 'Lunch', 'Dinner', 'Snack'].
+
+NAVIGATION (bottom tab bar): Today | Progress | Achievements | Settings.
+
+Keep components small and typed. Put the phase engine and Dexie db in /src/lib. No premature abstraction.
