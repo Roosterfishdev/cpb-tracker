@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useToastStore } from '../store/toastStore'
-import { X } from 'lucide-react'
+import { X, Trophy } from 'lucide-react'
 
 export function Toast() {
   const message = useToastStore((s) => s.message)
@@ -15,14 +15,16 @@ export function Toast() {
   if (!message) return null
 
   return (
-    <div className="fixed bottom-20 left-4 right-4 z-50 mx-auto max-w-md animate-slide-up">
-      <div className="flex items-center gap-3 rounded-xl border border-accent/30 bg-surface-elevated px-4 py-3 shadow-lg">
-        <span className="text-lg">🏆</span>
-        <p className="flex-1 text-sm font-medium text-foreground">{message}</p>
+    <div className="fixed bottom-28 left-5 right-5 z-50 mx-auto max-w-md animate-slide-up">
+      <div className="flex items-center gap-3 rounded-card bg-surface px-5 py-4 shadow-card">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/30">
+          <Trophy size={18} className="text-accent-deep" />
+        </div>
+        <p className="flex-1 text-sm font-bold text-foreground">{message}</p>
         <button
           type="button"
           onClick={dismiss}
-          className="rounded-lg p-1 text-muted hover:text-foreground"
+          className="rounded-full p-1.5 text-muted"
           aria-label="Dismiss"
         >
           <X size={16} />

@@ -14,8 +14,8 @@ export default defineConfig({
         name: 'CPB Tracker',
         short_name: 'CPB',
         description: '90-day CPB diet tracker with phased food reintroduction',
-        theme_color: '#FACC15',
-        background_color: '#0a0a0a',
+        theme_color: '#A3E635',
+        background_color: '#F4F7F0',
         display: 'standalone',
         orientation: 'portrait',
         icons: [

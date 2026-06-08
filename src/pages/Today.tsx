@@ -1,7 +1,9 @@
-import { useEffect, useCallback, useState } from 'react'
+import { useEffect, useCallback, useState, useRef } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { Pencil, MoreHorizontal } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { db, upsertMeal, upsertExercise, upsertDayNotes, ensureSeeded } from '../lib/db'
-import { todayKey, formatDisplayDate, getLastNDays } from '../lib/dates'
+import { todayKey, getLastNDays } from '../lib/dates'
 import {
   getDayNumber,
   getPhaseForDay,
@@ -9,10 +11,13 @@ import {
   getDaysRemainingInPhase,
 } from '../lib/phases'
 import { PhaseCard } from '../components/PhaseCard'
-import { MealRow } from '../components/MealRow'
+import { MealsCard } from '../components/MealRow'
 import { ExerciseCard } from '../components/ExerciseCard'
+import { CircularGauge } from '../components/CircularGauge'
+import { Card } from '../components/Card'
 import { evaluateAchievements, getAchievementById } from '../lib/achievements'
 import { useToastStore } from '../store/toastStore'
+import { format } from 'date-fns'
 
 function useDebouncedSave(value: string, onSave: (v: string) => void, delay = 500) {
   useEffect(() => {
@@ -21,9 +26,24 @@ function useDebouncedSave(value: string, onSave: (v: string) => void, delay = 50
   }, [value, onSave, delay])
 }
 
+function computeMealCompliance(
+  mealSlots: string[],
+  mealMap: Map<string, { eaten?: boolean; onPlan?: boolean; skipped?: boolean } | undefined>,
+) {
+  const total = mealSlots.length
+  const onPlanCount = mealSlots.filter((slot) => {
+    const m = mealMap.get(slot)
+    return m?.eaten && m?.onPlan && !m?.skipped
+  }).length
+  const percent = total > 0 ? Math.round((onPlanCount / total) * 100) : 0
+  return { onPlanCount, total, percent }
+}
+
 export function TodayPage() {
   const today = todayKey()
   const showToast = useToastStore((s) => s.show)
+  const navigate = useNavigate()
+  const notesRef = useRef<HTMLTextAreaElement>(null)
 
   const settings = useLiveQuery(async () => {
     await ensureSeeded()
@@ -52,6 +72,7 @@ export function TodayPage() {
   }, [today])
 
   const [notes, setNotes] = useState('')
+  const [showNotes, setShowNotes] = useState(false)
 
   useEffect(() => {
     setNotes(dayRecord?.notes ?? '')
@@ -91,32 +112,76 @@ export function TodayPage() {
     [today, runAchievements],
   )
 
+  const focusNotes = () => {
+    setShowNotes(true)
+    setTimeout(() => notesRef.current?.focus(), 50)
+  }
+
   if (!settings) {
-    return <div className="p-4 text-muted">Loading…</div>
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center p-5">
+        <p className="text-sm font-medium text-muted">Loading…</p>
+      </div>
+    )
   }
 
   const dayNumber = getDayNumber(settings.startDate)
   const phase = getPhaseForDay(dayNumber)
   const allowedFoods = getAllowedFoods(dayNumber)
   const daysRemaining = getDaysRemainingInPhase(dayNumber)
-  const progressPct = Math.min(100, (dayNumber / 90) * 100)
 
   const mealMap = new Map((meals ?? []).map((m) => [m.slot, m]))
+  const { onPlanCount, total, percent } = computeMealCompliance(
+    settings.mealSlots,
+    mealMap,
+  )
+
+  const datePill = format(new Date(), 'MMM d')
 
   return (
-    <div className="space-y-4 p-4">
-      <header>
-        <p className="text-sm text-muted">{formatDisplayDate(today)}</p>
-        <h1 className="text-2xl font-bold text-foreground">
-          Day {dayNumber} <span className="text-muted">/ 90</span>
+    <div className="space-y-5 px-5 pb-6 pt-4">
+      {/* Top bar */}
+      <header className="relative flex items-center justify-between">
+        <span className="rounded-full bg-surface px-3.5 py-1.5 text-xs font-bold text-foreground shadow-card">
+          Today · {datePill}
+        </span>
+        <h1 className="absolute left-1/2 -translate-x-1/2 text-base font-extrabold text-foreground">
+          CPB Tracker
         </h1>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-elevated">
-          <div
-            className="h-full rounded-full bg-accent transition-all"
-            style={{ width: `${progressPct}%` }}
-          />
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={focusNotes}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-surface text-muted shadow-card"
+            aria-label="Edit notes"
+          >
+            <Pencil size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/settings')}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-surface text-muted shadow-card"
+            aria-label="Settings"
+          >
+            <MoreHorizontal size={16} />
+          </button>
         </div>
       </header>
+
+      {/* Hero compliance gauge */}
+      <div className="hero-gradient rounded-card px-5 py-6 shadow-card">
+        <div className="flex flex-col items-center">
+          <CircularGauge percent={percent} size={168} strokeWidth={14}>
+            <span className="text-4xl font-extrabold text-white">{percent}%</span>
+            <span className="mt-0.5 text-sm font-semibold text-white/90">
+              {onPlanCount} of {total} on plan
+            </span>
+          </CircularGauge>
+          <p className="mt-4 text-center text-sm font-semibold text-white/95">
+            Day {dayNumber} · Phase {phase.id} · {phase.label}
+          </p>
+        </div>
+      </div>
 
       <PhaseCard
         phase={phase}
@@ -124,19 +189,11 @@ export function TodayPage() {
         allowedFoods={allowedFoods}
       />
 
-      <section>
-        <h2 className="mb-3 text-base font-semibold text-foreground">Meals</h2>
-        <div className="space-y-2">
-          {settings.mealSlots.map((slot) => (
-            <MealRow
-              key={slot}
-              slot={slot}
-              meal={mealMap.get(slot)}
-              onUpdate={(updates) => handleMealUpdate(slot, updates)}
-            />
-          ))}
-        </div>
-      </section>
+      <MealsCard
+        mealSlots={settings.mealSlots}
+        meals={mealMap}
+        onUpdate={handleMealUpdate}
+      />
 
       <ExerciseCard
         exercise={exercise ?? undefined}
@@ -144,16 +201,19 @@ export function TodayPage() {
         onUpdate={handleExerciseUpdate}
       />
 
-      <section>
-        <h2 className="mb-2 text-base font-semibold text-foreground">Notes</h2>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={3}
-          placeholder="How did today go?"
-          className="w-full resize-none rounded-xl border border-border bg-surface-elevated px-4 py-3 text-sm text-foreground placeholder:text-muted focus:border-accent focus:outline-none"
-        />
-      </section>
+      {(showNotes || notes) && (
+        <Card>
+          <h2 className="mb-3 text-base font-bold text-foreground">Notes</h2>
+          <textarea
+            ref={notesRef}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={3}
+            placeholder="How did today go?"
+            className="w-full resize-none rounded-2xl bg-surface-muted px-4 py-3 text-sm font-medium text-foreground outline-none placeholder:text-muted"
+          />
+        </Card>
+      )}
     </div>
   )
 }

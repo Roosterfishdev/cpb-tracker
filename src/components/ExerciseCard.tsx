@@ -1,4 +1,7 @@
+import { Dumbbell } from 'lucide-react'
 import type { Exercise, ExerciseType } from '../lib/db'
+import { Card } from './Card'
+import { SectionHeader } from './SectionHeader'
 
 const EXERCISE_TYPES: { value: ExerciseType; label: string }[] = [
   { value: 'walking', label: 'Walking' },
@@ -18,13 +21,12 @@ export function ExerciseCard({ exercise, weeklyCount, onUpdate }: ExerciseCardPr
   const didExercise = exercise?.didExercise ?? false
 
   return (
-    <section className="rounded-2xl border border-border bg-surface p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-base font-semibold text-foreground">Exercise</h2>
-        <span className="rounded-full bg-surface-elevated px-3 py-1 text-xs text-muted">
-          Exercised {weeklyCount}/7 this week
-        </span>
-      </div>
+    <Card>
+      <SectionHeader
+        icon={<Dumbbell size={18} strokeWidth={2.25} />}
+        title="Exercise"
+        subtitle={`${weeklyCount}/7 days this week`}
+      />
 
       <button
         type="button"
@@ -36,10 +38,10 @@ export function ExerciseCard({ exercise, weeklyCount, onUpdate }: ExerciseCardPr
             note: undefined,
           })
         }
-        className={`mb-3 w-full min-h-[44px] rounded-xl border text-sm font-medium transition-colors ${
+        className={`mb-4 w-full min-h-[48px] rounded-full text-sm font-bold transition-all ${
           didExercise
-            ? 'border-accent bg-accent/15 text-accent'
-            : 'border-border bg-surface-elevated text-foreground'
+            ? 'bg-accent text-foreground shadow-sm'
+            : 'bg-surface-muted text-foreground'
         }`}
       >
         Did you exercise today?
@@ -47,67 +49,58 @@ export function ExerciseCard({ exercise, weeklyCount, onUpdate }: ExerciseCardPr
 
       {didExercise && (
         <div className="space-y-3">
-          <div>
-            <label className="mb-1 block text-xs text-muted">Type</label>
-            <select
-              value={exercise?.type ?? ''}
-              onChange={(e) =>
-                onUpdate({
-                  didExercise: true,
-                  type: e.target.value as ExerciseType,
-                  minutes: exercise?.minutes,
-                  note: exercise?.note,
-                })
-              }
-              className="w-full min-h-[44px] rounded-xl border border-border bg-background px-3 text-sm text-foreground"
-            >
-              <option value="">Select type…</option>
-              {EXERCISE_TYPES.map(({ value, label }) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <select
+            value={exercise?.type ?? ''}
+            onChange={(e) =>
+              onUpdate({
+                didExercise: true,
+                type: e.target.value as ExerciseType,
+                minutes: exercise?.minutes,
+                note: exercise?.note,
+              })
+            }
+            className="w-full min-h-[48px] rounded-full bg-surface-muted px-4 text-sm font-medium text-foreground outline-none"
+          >
+            <option value="">Select type…</option>
+            {EXERCISE_TYPES.map(({ value, label }) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
 
-          <div>
-            <label className="mb-1 block text-xs text-muted">Minutes (optional)</label>
-            <input
-              type="number"
-              min={0}
-              value={exercise?.minutes ?? ''}
-              onChange={(e) =>
-                onUpdate({
-                  didExercise: true,
-                  type: exercise?.type,
-                  minutes: e.target.value ? Number(e.target.value) : undefined,
-                  note: exercise?.note,
-                })
-              }
-              className="w-full min-h-[44px] rounded-xl border border-border bg-background px-3 text-sm text-foreground"
-              placeholder="30"
-            />
-          </div>
+          <input
+            type="number"
+            min={0}
+            value={exercise?.minutes ?? ''}
+            onChange={(e) =>
+              onUpdate({
+                didExercise: true,
+                type: exercise?.type,
+                minutes: e.target.value ? Number(e.target.value) : undefined,
+                note: exercise?.note,
+              })
+            }
+            className="w-full min-h-[48px] rounded-full bg-surface-muted px-4 text-sm font-medium text-foreground outline-none placeholder:text-muted"
+            placeholder="Minutes (optional)"
+          />
 
-          <div>
-            <label className="mb-1 block text-xs text-muted">Note (optional)</label>
-            <input
-              type="text"
-              value={exercise?.note ?? ''}
-              onChange={(e) =>
-                onUpdate({
-                  didExercise: true,
-                  type: exercise?.type,
-                  minutes: exercise?.minutes,
-                  note: e.target.value || undefined,
-                })
-              }
-              className="w-full min-h-[44px] rounded-xl border border-border bg-background px-3 text-sm text-foreground"
-              placeholder="Morning session"
-            />
-          </div>
+          <input
+            type="text"
+            value={exercise?.note ?? ''}
+            onChange={(e) =>
+              onUpdate({
+                didExercise: true,
+                type: exercise?.type,
+                minutes: exercise?.minutes,
+                note: e.target.value || undefined,
+              })
+            }
+            className="w-full min-h-[48px] rounded-full bg-surface-muted px-4 text-sm font-medium text-foreground outline-none placeholder:text-muted"
+            placeholder="Note (optional)"
+          />
         </div>
       )}
-    </section>
+    </Card>
   )
 }

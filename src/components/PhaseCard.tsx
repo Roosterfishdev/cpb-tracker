@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { Leaf } from 'lucide-react'
 import type { Phase } from '../lib/phases'
 import { getGlobalRules } from '../lib/phases'
+import { Card } from './Card'
+import { SectionHeader } from './SectionHeader'
 
 interface PhaseCardProps {
   phase: Phase
@@ -14,36 +16,24 @@ export function PhaseCard({ phase, daysRemaining, allowedFoods }: PhaseCardProps
   const rules = getGlobalRules()
 
   return (
-    <section className="rounded-2xl border border-border bg-surface p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-accent">
-            Phase {phase.id}
-          </p>
-          <h2 className="text-lg font-semibold text-foreground">{phase.label}</h2>
-          <p className="mt-1 text-sm text-muted">
-            {daysRemaining === 0
-              ? 'Last day of this phase'
-              : `${daysRemaining} day${daysRemaining === 1 ? '' : 's'} left in phase`}
-          </p>
-        </div>
-      </div>
-
-      <button
-        type="button"
+    <Card>
+      <SectionHeader
+        icon={<Leaf size={18} strokeWidth={2.25} />}
+        title={`Phase ${phase.id} · ${phase.label}`}
+        subtitle={
+          daysRemaining === 0
+            ? 'Last day of this phase'
+            : `${daysRemaining} day${daysRemaining === 1 ? '' : 's'} left`
+        }
         onClick={() => setExpanded(!expanded)}
-        className="mt-3 flex w-full items-center justify-between rounded-xl bg-surface-elevated px-3 py-2.5 text-sm font-medium text-foreground"
-      >
-        Allowed foods ({allowedFoods.length})
-        {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-      </button>
+      />
 
       {expanded && (
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mb-4 flex flex-wrap gap-2">
           {allowedFoods.map((food) => (
             <span
               key={food}
-              className="rounded-full border border-border bg-surface-elevated px-3 py-1 text-xs text-foreground"
+              className="rounded-full bg-surface-muted px-3.5 py-1.5 text-xs font-medium text-foreground"
             >
               {food}
             </span>
@@ -51,9 +41,13 @@ export function PhaseCard({ phase, daysRemaining, allowedFoods }: PhaseCardProps
         </div>
       )}
 
-      <p className="mt-3 text-xs leading-relaxed text-muted">
-        {rules.join(' · ')}
-      </p>
-    </section>
+      {!expanded && (
+        <p className="mb-3 text-xs font-medium text-muted">
+          {allowedFoods.length} allowed foods · tap to expand
+        </p>
+      )}
+
+      <p className="text-xs leading-relaxed text-muted">{rules.join(' · ')}</p>
+    </Card>
   )
 }

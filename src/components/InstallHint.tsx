@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X } from 'lucide-react'
+import { X, Download } from 'lucide-react'
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -57,15 +57,18 @@ export function InstallHint() {
   if (!visible) return null
 
   return (
-    <div className="fixed top-4 left-4 right-4 z-50 mx-auto max-w-md">
-      <div className="flex items-start gap-3 rounded-xl border border-accent/30 bg-surface-elevated px-4 py-3 shadow-lg">
+    <div className="fixed top-4 left-5 right-5 z-50 mx-auto max-w-md">
+      <div className="flex items-start gap-3 rounded-card bg-surface px-5 py-4 shadow-card">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/30">
+          <Download size={18} className="text-accent-deep" />
+        </div>
         <div className="flex-1 text-sm">
           {isIos ? (
-            <p className="text-foreground">
+            <p className="font-semibold text-foreground">
               Install CPB Tracker: tap Share, then &quot;Add to Home Screen&quot;.
             </p>
           ) : (
-            <p className="text-foreground">
+            <p className="font-semibold text-foreground">
               Install CPB Tracker for the best experience.
             </p>
           )}
@@ -75,7 +78,7 @@ export function InstallHint() {
             <button
               type="button"
               onClick={install}
-              className="rounded-lg bg-accent px-3 py-1 text-xs font-medium text-background"
+              className="rounded-full bg-accent px-4 py-1.5 text-xs font-bold text-foreground"
             >
               Install
             </button>
@@ -83,7 +86,7 @@ export function InstallHint() {
           <button
             type="button"
             onClick={dismiss}
-            className="rounded-lg p-1 text-muted hover:text-foreground"
+            className="rounded-full p-1.5 text-muted"
             aria-label="Dismiss"
           >
             <X size={16} />

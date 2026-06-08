@@ -1,6 +1,9 @@
 import { useLiveQuery } from 'dexie-react-hooks'
+import { Trophy } from 'lucide-react'
 import { db, ensureSeeded } from '../lib/db'
 import { ACHIEVEMENT_DEFINITIONS } from '../lib/achievements'
+import { Card } from '../components/Card'
+import { ProgressBar } from '../components/ProgressBar'
 
 export function AchievementsPage() {
   const earnedRecords = useLiveQuery(async () => {
@@ -19,41 +22,47 @@ export function AchievementsPage() {
   const progressPct = total > 0 ? (earnedCount / total) * 100 : 0
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-5 px-5 pb-6 pt-4">
       <header>
-        <h1 className="text-2xl font-bold text-foreground">Achievements</h1>
-        <p className="mt-1 text-sm text-muted">
-          {earnedCount} / {total} earned
-        </p>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-elevated">
-          <div
-            className="h-full rounded-full bg-accent transition-all"
-            style={{ width: `${progressPct}%` }}
-          />
+        <div className="mb-2 flex items-center gap-2">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/30">
+            <Trophy size={20} className="text-accent-deep" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-extrabold text-foreground">Achievements</h1>
+            <p className="text-sm font-medium text-muted">
+              {earnedCount} / {total} earned
+            </p>
+          </div>
         </div>
+        <ProgressBar value={progressPct} barClassName="bg-accent" height="h-2.5" />
       </header>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-4">
         {ACHIEVEMENT_DEFINITIONS.map((def) => {
           const earnedAt = earnedMap.get(def.id)
           const earned = !!earnedAt
 
           return (
-            <div
+            <Card
               key={def.id}
-              className={`rounded-2xl border p-4 ${
+              className={
                 earned
-                  ? 'border-accent/30 bg-surface'
-                  : 'border-border bg-surface/50 opacity-60'
-              }`}
+                  ? 'bg-accent/10 !shadow-card'
+                  : 'opacity-55 grayscale'
+              }
             >
-              <span className="text-2xl">{def.icon}</span>
-              <h3 className="mt-2 text-sm font-semibold text-foreground">{def.title}</h3>
-              <p className="mt-1 text-xs text-muted">{def.description}</p>
+              <span className="text-3xl">{def.icon}</span>
+              <h3 className="mt-3 text-sm font-bold text-foreground">{def.title}</h3>
+              <p className="mt-1 text-xs font-medium leading-relaxed text-muted">
+                {def.description}
+              </p>
               {earned && earnedAt && (
-                <p className="mt-2 text-xs text-accent">Earned {earnedAt}</p>
+                <p className="mt-2 text-xs font-semibold text-accent-deep">
+                  Earned {earnedAt}
+                </p>
               )}
-            </div>
+            </Card>
           )
         })}
       </div>

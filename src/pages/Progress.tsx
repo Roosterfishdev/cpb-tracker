@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   LineChart,
@@ -9,16 +9,22 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts'
+import { Scale, BarChart3, TrendingUp, Activity } from 'lucide-react'
 import { db, upsertCheckin, ensureSeeded } from '../lib/db'
-import { todayKey, getLastNDays, formatDisplayDate } from '../lib/dates'
+import { todayKey, getLastNDays } from '../lib/dates'
 import {
   getDayNumber,
   getPhaseForDay,
   dayNumberToDateKey,
 } from '../lib/phases'
-import { getDayStatus, isDayCompliant } from '../lib/compliance'
+import { isDayCompliant } from '../lib/compliance'
 import { evaluateAchievements, getAchievementById } from '../lib/achievements'
 import { useToastStore } from '../store/toastStore'
+import { Card } from '../components/Card'
+import { SectionHeader } from '../components/SectionHeader'
+import { ComplianceBarChart } from '../components/ComplianceBarChart'
+import { ExerciseDonutChart } from '../components/ExerciseDonutChart'
+import { format } from 'date-fns'
 
 function RatingSelector({
   label,
@@ -31,17 +37,17 @@ function RatingSelector({
 }) {
   return (
     <div>
-      <p className="mb-2 text-sm text-muted">{label}</p>
+      <p className="mb-2.5 text-sm font-semibold text-foreground">{label}</p>
       <div className="flex gap-2">
         {([1, 2, 3, 4, 5] as const).map((n) => (
           <button
             key={n}
             type="button"
             onClick={() => onChange(n)}
-            className={`min-h-[44px] flex-1 rounded-lg border text-sm font-medium ${
+            className={`min-h-[44px] flex-1 rounded-full text-sm font-bold transition-all ${
               value === n
-                ? 'border-accent bg-accent/15 text-accent'
-                : 'border-border bg-surface-elevated text-muted'
+                ? 'bg-accent text-foreground shadow-sm'
+                : 'bg-surface-muted text-muted'
             }`}
           >
             {n}
@@ -55,6 +61,12 @@ function RatingSelector({
 export function ProgressPage() {
   const today = todayKey()
   const showToast = useToastStore((s) => s.show)
+
+  useEffect(() => {
+    if (window.location.hash === '#check-in') {
+      document.getElementById('check-in')?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [])
 
   const settings = useLiveQuery(async () => {
     await ensureSeeded()
@@ -82,6 +94,25 @@ export function ProgressPage() {
     },
     [today, runAchievements],
   )
+
+  const complianceBars = useLiveQuery(async () => {
+    if (!settings) return []
+    const bars = []
+    for (const key of weekKeys) {
+      const meals = await db.meals.where('date').equals(key).toArray()
+      const mealMap = new Map(meals.map((m) => [m.slot, m]))
+      const onPlanCount = settings.mealSlots.filter((slot) => {
+        const m = mealMap.get(slot)
+        return m?.eaten && m?.onPlan && !m?.skipped
+      }).length
+      bars.push({
+        label: format(new Date(key + 'T12:00:00'), 'EEE'),
+        count: onPlanCount,
+        isToday: key === today,
+      })
+    }
+    return bars
+  }, [weekKeys.join(','), settings?.mealSlots.join(','), today])
 
   const weekSummary = useLiveQuery(async () => {
     if (!settings) return null
@@ -111,22 +142,30 @@ export function ProgressPage() {
     }
   }, [weekKeys.join(','), settings?.startDate])
 
-  const phaseGrid = useLiveQuery(async () => {
+  const exerciseBreakdown = useLiveQuery(async () => {
     if (!settings) return []
     const dayNumber = getDayNumber(settings.startDate)
     const phase = getPhaseForDay(dayNumber)
-    const days: { dayNum: number; dateKey: string; status: Awaited<ReturnType<typeof getDayStatus>> }[] = []
-
+    const dateKeys: string[] = []
     for (let d = phase.startDay; d <= Math.min(phase.endDay, dayNumber); d++) {
-      const dateKey = dayNumberToDateKey(settings.startDate, d)
-      const status = await getDayStatus(dateKey)
-      days.push({ dayNum: d, dateKey, status })
+      dateKeys.push(dayNumberToDateKey(settings.startDate, d))
     }
-    return days
+    const exercises = await db.exercise.where('date').anyOf(dateKeys).toArray()
+    const counts: Record<string, number> = {}
+    for (const ex of exercises) {
+      if (ex.didExercise && ex.type) {
+        counts[ex.type] = (counts[ex.type] ?? 0) + 1
+      }
+    }
+    return Object.entries(counts).map(([type, count]) => ({ type, count }))
   }, [settings?.startDate, today])
 
   if (!settings) {
-    return <div className="p-4 text-muted">Loading…</div>
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center p-5">
+        <p className="text-sm font-medium text-muted">Loading…</p>
+      </div>
+    )
   }
 
   const weightData = (allCheckins ?? [])
@@ -139,19 +178,26 @@ export function ProgressPage() {
 
   const dayNumber = getDayNumber(settings.startDate)
   const phase = getPhaseForDay(dayNumber)
+  const maxSlots = settings.mealSlots.length
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-5 px-5 pb-6 pt-4">
       <header>
-        <h1 className="text-2xl font-bold text-foreground">Progress</h1>
-        <p className="text-sm text-muted">Phase {phase.id} · {phase.label}</p>
+        <h1 className="text-2xl font-extrabold text-foreground">Progress</h1>
+        <p className="mt-1 text-sm font-medium text-muted">
+          Phase {phase.id} · {phase.label}
+        </p>
       </header>
 
-      <section className="rounded-2xl border border-border bg-surface p-4">
-        <h2 className="mb-4 text-base font-semibold text-foreground">Daily check-in</h2>
-        <div className="space-y-4">
+      <Card id="check-in">
+        <SectionHeader
+          icon={<Scale size={18} strokeWidth={2.25} />}
+          title="Daily check-in"
+          subtitle="Weight & wellbeing"
+        />
+        <div className="space-y-5">
           <div>
-            <label className="mb-1 block text-sm text-muted">
+            <label className="mb-2 block text-sm font-semibold text-foreground">
               Weight ({settings.weightUnit})
             </label>
             <input
@@ -166,7 +212,7 @@ export function ProgressPage() {
                   mood: checkin?.mood,
                 })
               }
-              className="w-full min-h-[44px] rounded-xl border border-border bg-surface-elevated px-3 text-sm text-foreground"
+              className="w-full min-h-[48px] rounded-full bg-surface-muted px-4 text-sm font-medium text-foreground outline-none placeholder:text-muted"
               placeholder="Optional"
             />
           </div>
@@ -207,92 +253,95 @@ export function ProgressPage() {
             }
           />
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-2xl border border-border bg-surface p-4">
-        <h2 className="mb-4 text-base font-semibold text-foreground">Weight trend</h2>
+      <Card>
+        <SectionHeader
+          icon={<BarChart3 size={18} strokeWidth={2.25} />}
+          title="Weekly compliance"
+          subtitle="Meals on plan · last 7 days"
+        />
+        {complianceBars && (
+          <ComplianceBarChart
+            data={complianceBars}
+            maxSlots={maxSlots}
+            target={maxSlots}
+          />
+        )}
+      </Card>
+
+      <Card>
+        <SectionHeader
+          icon={<TrendingUp size={18} strokeWidth={2.25} />}
+          title="Weight trend"
+        />
         {weightData.length >= 2 ? (
           <div className="h-48 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={weightData}>
-                <CartesianGrid stroke="#2a2a2a" strokeDasharray="3 3" />
-                <XAxis dataKey="date" tick={{ fill: '#a3a3a3', fontSize: 11 }} />
+                <CartesianGrid stroke="#EEF2E8" strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="date"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#8A8F88', fontSize: 11, fontWeight: 500 }}
+                />
                 <YAxis
-                  tick={{ fill: '#a3a3a3', fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#8A8F88', fontSize: 11, fontWeight: 500 }}
                   domain={['auto', 'auto']}
                   width={36}
                 />
                 <Tooltip
                   contentStyle={{
-                    background: '#1c1c1c',
-                    border: '1px solid #2a2a2a',
-                    borderRadius: 8,
+                    background: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: 16,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+                    fontWeight: 600,
                   }}
                 />
                 <Line
                   type="monotone"
                   dataKey="weight"
-                  stroke="#FACC15"
-                  strokeWidth={2}
-                  dot={{ fill: '#FACC15', r: 3 }}
+                  stroke="#A3E635"
+                  strokeWidth={3}
+                  dot={{ fill: '#A3E635', r: 4, strokeWidth: 0 }}
                   connectNulls
                 />
               </LineChart>
             </ResponsiveContainer>
           </div>
         ) : (
-          <p className="py-8 text-center text-sm text-muted">
+          <p className="py-8 text-center text-sm font-medium text-muted">
             Log weight on at least 2 days to see your trend chart.
           </p>
         )}
-      </section>
+      </Card>
+
+      <Card>
+        <SectionHeader
+          icon={<Activity size={18} strokeWidth={2.25} />}
+          title="Exercise breakdown"
+          subtitle={`Phase ${phase.id} · by type`}
+        />
+        <ExerciseDonutChart data={exerciseBreakdown ?? []} />
+      </Card>
 
       {weekSummary && (
-        <section className="rounded-2xl border border-border bg-surface p-4">
-          <h2 className="mb-3 text-base font-semibold text-foreground">This week</h2>
-          <div className="grid grid-cols-2 gap-3 text-sm">
+        <Card>
+          <SectionHeader
+            icon={<BarChart3 size={18} strokeWidth={2.25} />}
+            title="This week"
+          />
+          <div className="grid grid-cols-2 gap-3">
             <Stat label="Avg energy" value={weekSummary.avgEnergy} />
             <Stat label="Avg cravings" value={weekSummary.avgCravings} />
             <Stat label="Compliant days" value={String(weekSummary.compliantDays)} />
             <Stat label="Exercise days" value={String(weekSummary.exerciseDays)} />
           </div>
-        </section>
-      )}
-
-      {phaseGrid && phaseGrid.length > 0 && (
-        <section className="rounded-2xl border border-border bg-surface p-4">
-          <h2 className="mb-3 text-base font-semibold text-foreground">
-            Phase {phase.id} compliance
-          </h2>
-          <div className="flex flex-wrap gap-1.5">
-            {phaseGrid.map(({ dayNum, dateKey, status }) => (
-              <div
-                key={dateKey}
-                title={`Day ${dayNum} · ${formatDisplayDate(dateKey)}`}
-                className={`h-8 w-8 rounded-md text-center text-xs leading-8 ${
-                  status === 'compliant'
-                    ? 'bg-accent text-background font-medium'
-                    : status === 'logged'
-                      ? 'bg-muted/30 text-muted'
-                      : 'bg-surface-elevated text-muted/40'
-                }`}
-              >
-                {dayNum}
-              </div>
-            ))}
-          </div>
-          <div className="mt-3 flex gap-4 text-xs text-muted">
-            <span className="flex items-center gap-1">
-              <span className="inline-block h-3 w-3 rounded bg-accent" /> Compliant
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block h-3 w-3 rounded bg-muted/30" /> Logged
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block h-3 w-3 rounded bg-surface-elevated" /> Missed
-            </span>
-          </div>
-        </section>
+        </Card>
       )}
     </div>
   )
@@ -300,9 +349,9 @@ export function ProgressPage() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-surface-elevated px-3 py-2">
-      <p className="text-xs text-muted">{label}</p>
-      <p className="text-lg font-semibold text-foreground">{value}</p>
+    <div className="rounded-2xl bg-surface-muted px-4 py-3">
+      <p className="text-xs font-medium text-muted">{label}</p>
+      <p className="text-xl font-extrabold text-foreground">{value}</p>
     </div>
   )
 }

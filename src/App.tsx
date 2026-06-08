@@ -25,7 +25,7 @@ function AppContent() {
   }, [showToast])
 
   return (
-    <div className="mx-auto min-h-full max-w-md bg-background pb-20">
+    <div className="mx-auto min-h-full max-w-md bg-background pb-32">
       <Routes>
         <Route path="/" element={<TodayPage />} />
         <Route path="/progress" element={<ProgressPage />} />

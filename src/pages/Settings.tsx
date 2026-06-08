@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { Settings, Calendar, Utensils, Database } from 'lucide-react'
 import {
   ensureSeeded,
   getSettings,
@@ -12,6 +13,8 @@ import {
 import { getDayNumber, getPhaseForDay } from '../lib/phases'
 import { evaluateAchievements } from '../lib/achievements'
 import { useToastStore } from '../store/toastStore'
+import { Card } from '../components/Card'
+import { SectionHeader } from '../components/SectionHeader'
 
 const APP_VERSION = '1.0.0'
 
@@ -28,7 +31,11 @@ export function SettingsPage() {
   })
 
   if (!settings) {
-    return <div className="p-4 text-muted">Loading…</div>
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center p-5">
+        <p className="text-sm font-medium text-muted">Loading…</p>
+      </div>
+    )
   }
 
   const dayNumber = getDayNumber(settings.startDate)
@@ -94,50 +101,68 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-5 px-5 pb-6 pt-4">
       <header>
-        <h1 className="text-2xl font-bold text-foreground">Settings</h1>
+        <div className="flex items-center gap-2">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-muted">
+            <Settings size={20} className="text-foreground" />
+          </div>
+          <h1 className="text-2xl font-extrabold text-foreground">Settings</h1>
+        </div>
       </header>
 
-      <section className="rounded-2xl border border-border bg-surface p-4 space-y-4">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-foreground">Start date</label>
-          <input
-            type="date"
-            value={settings.startDate}
-            onChange={(e) => handleStartDateChange(e.target.value)}
-            className="w-full min-h-[44px] rounded-xl border border-border bg-surface-elevated px-3 text-sm text-foreground"
-          />
-          {startDateWarning && (
-            <p className="mt-1 text-xs text-accent-muted">
-              Changing start date shifts all phase calculations.
-            </p>
-          )}
-        </div>
+      <Card>
+        <SectionHeader
+          icon={<Calendar size={18} strokeWidth={2.25} />}
+          title="Program"
+        />
+        <div className="space-y-4">
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-foreground">
+              Start date
+            </label>
+            <input
+              type="date"
+              value={settings.startDate}
+              onChange={(e) => handleStartDateChange(e.target.value)}
+              className="w-full min-h-[48px] rounded-full bg-surface-muted px-4 text-sm font-medium text-foreground outline-none"
+            />
+            {startDateWarning && (
+              <p className="mt-2 text-xs font-medium text-accent-deep">
+                Changing start date shifts all phase calculations.
+              </p>
+            )}
+          </div>
 
-        <div>
-          <label className="mb-2 block text-sm font-medium text-foreground">Weight unit</label>
-          <div className="flex gap-2">
-            {(['kg', 'lb'] as const).map((unit) => (
-              <button
-                key={unit}
-                type="button"
-                onClick={() => updateSettings({ weightUnit: unit })}
-                className={`min-h-[44px] flex-1 rounded-xl border text-sm font-medium ${
-                  settings.weightUnit === unit
-                    ? 'border-accent bg-accent/15 text-accent'
-                    : 'border-border bg-surface-elevated text-muted'
-                }`}
-              >
-                {unit}
-              </button>
-            ))}
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-foreground">
+              Weight unit
+            </label>
+            <div className="flex gap-2">
+              {(['kg', 'lb'] as const).map((unit) => (
+                <button
+                  key={unit}
+                  type="button"
+                  onClick={() => updateSettings({ weightUnit: unit })}
+                  className={`min-h-[48px] flex-1 rounded-full text-sm font-bold transition-all ${
+                    settings.weightUnit === unit
+                      ? 'bg-accent text-foreground shadow-sm'
+                      : 'bg-surface-muted text-muted'
+                  }`}
+                >
+                  {unit}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-2xl border border-border bg-surface p-4">
-        <h2 className="mb-3 text-base font-semibold text-foreground">Meal slots</h2>
+      <Card>
+        <SectionHeader
+          icon={<Utensils size={18} strokeWidth={2.25} />}
+          title="Meal slots"
+        />
         <div className="space-y-2">
           {settings.mealSlots.map((slot) => (
             <div key={slot} className="flex items-center gap-2">
@@ -145,13 +170,13 @@ export function SettingsPage() {
                 type="text"
                 defaultValue={slot}
                 onBlur={(e) => renameMealSlot(slot, e.target.value)}
-                className="min-h-[44px] flex-1 rounded-xl border border-border bg-surface-elevated px-3 text-sm text-foreground"
+                className="min-h-[48px] flex-1 rounded-full bg-surface-muted px-4 text-sm font-medium text-foreground outline-none"
               />
               <button
                 type="button"
                 onClick={() => removeMealSlot(slot)}
                 disabled={settings.mealSlots.length <= 1}
-                className="rounded-lg px-3 py-2 text-xs text-danger disabled:opacity-30"
+                className="rounded-full px-4 py-2 text-xs font-semibold text-danger disabled:opacity-30"
               >
                 Remove
               </button>
@@ -164,12 +189,12 @@ export function SettingsPage() {
             value={newSlot}
             onChange={(e) => setNewSlot(e.target.value)}
             placeholder="New slot name"
-            className="min-h-[44px] flex-1 rounded-xl border border-border bg-surface-elevated px-3 text-sm text-foreground"
+            className="min-h-[48px] flex-1 rounded-full bg-surface-muted px-4 text-sm font-medium text-foreground outline-none placeholder:text-muted"
           />
           <button
             type="button"
             onClick={addMealSlot}
-            className="rounded-xl bg-accent px-4 py-2 text-sm font-medium text-background"
+            className="rounded-full bg-accent px-5 py-2 text-sm font-bold text-foreground shadow-sm"
           >
             Add
           </button>
@@ -177,71 +202,88 @@ export function SettingsPage() {
         <button
           type="button"
           onClick={() => updateSettings({ mealSlots: [...DEFAULT_MEAL_SLOTS] })}
-          className="mt-2 text-xs text-muted hover:text-foreground"
+          className="mt-3 text-xs font-medium text-muted"
         >
           Reset to defaults
         </button>
-      </section>
+      </Card>
 
-      <section className="rounded-2xl border border-border bg-surface p-4 space-y-3">
-        <h2 className="text-base font-semibold text-foreground">Data</h2>
-        <button
-          type="button"
-          onClick={handleExport}
-          className="w-full min-h-[44px] rounded-xl border border-border bg-surface-elevated text-sm font-medium text-foreground"
-        >
-          Export data
-        </button>
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="w-full min-h-[44px] rounded-xl border border-border bg-surface-elevated text-sm font-medium text-foreground"
-        >
-          Import data
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/json"
-          className="hidden"
-          onChange={handleImport}
+      <Card>
+        <SectionHeader
+          icon={<Database size={18} strokeWidth={2.25} />}
+          title="Data"
         />
-        {!confirmReset ? (
-          <button
-            type="button"
-            onClick={() => setConfirmReset(true)}
-            className="w-full min-h-[44px] rounded-xl border border-danger/50 text-sm font-medium text-danger"
-          >
-            Reset everything
-          </button>
-        ) : (
-          <div className="space-y-2">
-            <p className="text-sm text-danger">This will delete all your data. Are you sure?</p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleReset}
-                className="flex-1 min-h-[44px] rounded-xl bg-danger text-sm font-medium text-white"
-              >
-                Yes, reset
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmReset(false)}
-                className="flex-1 min-h-[44px] rounded-xl border border-border text-sm text-muted"
-              >
-                Cancel
-              </button>
+        <div className="space-y-2">
+          <ActionButton onClick={handleExport}>Export data</ActionButton>
+          <ActionButton onClick={() => fileInputRef.current?.click()}>
+            Import data
+          </ActionButton>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json"
+            className="hidden"
+            onChange={handleImport}
+          />
+          {!confirmReset ? (
+            <button
+              type="button"
+              onClick={() => setConfirmReset(true)}
+              className="w-full min-h-[48px] rounded-full bg-pastel-pink/40 text-sm font-bold text-danger"
+            >
+              Reset everything
+            </button>
+          ) : (
+            <div className="space-y-2 rounded-2xl bg-pastel-pink/30 p-4">
+              <p className="text-sm font-semibold text-danger">
+                This will delete all your data. Are you sure?
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="flex-1 min-h-[44px] rounded-full bg-danger text-sm font-bold text-white"
+                >
+                  Yes, reset
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmReset(false)}
+                  className="flex-1 min-h-[44px] rounded-full bg-surface-muted text-sm font-semibold text-muted"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
-          </div>
-        )}
-      </section>
+          )}
+        </div>
+      </Card>
 
-      <section className="rounded-2xl border border-border bg-surface p-4">
-        <h2 className="mb-2 text-base font-semibold text-foreground">About</h2>
-        <p className="text-sm text-muted">Day {dayNumber} · Phase {phase.id}: {phase.label}</p>
-        <p className="text-sm text-muted">Version {APP_VERSION}</p>
-      </section>
+      <Card>
+        <h2 className="mb-2 text-base font-bold text-foreground">About</h2>
+        <p className="text-sm font-medium text-muted">
+          Day {dayNumber} · Phase {phase.id}: {phase.label}
+        </p>
+        <p className="text-sm font-medium text-muted">Version {APP_VERSION}</p>
+      </Card>
     </div>
+  )
+}
+
+function ActionButton({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full min-h-[48px] rounded-full bg-surface-muted text-sm font-bold text-foreground"
+    >
+      {children}
+    </button>
   )
 }
