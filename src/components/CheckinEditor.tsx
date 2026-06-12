@@ -116,30 +116,32 @@ export function CheckinEditor({
   onSaved,
 }: CheckinEditorProps) {
   const showToast = useToastStore((s) => s.show)
-  const checkin = useLiveQuery(() => db.checkins.get(date), [date])
+  // undefined = loading, null = no record, object = saved row
+  const checkin = useLiveQuery(
+    async () => (await db.checkins.get(date)) ?? null,
+    [date],
+  )
 
   const editByDefault = startInEditMode ?? compact ?? false
 
   const [form, setForm] = useState<CheckinForm>({ weight: '' })
-  const [isEditing, setIsEditing] = useState(editByDefault)
+  const [isEditing, setIsEditing] = useState(true)
   const [savedFlash, setSavedFlash] = useState(false)
   const loadedRef = useRef(false)
 
   useEffect(() => {
     loadedRef.current = false
     setForm({ weight: '' })
-    setIsEditing(editByDefault)
+    setIsEditing(true)
     setSavedFlash(false)
-  }, [date, editByDefault])
+  }, [date])
 
   useEffect(() => {
     if (checkin === undefined || loadedRef.current) return
     loadedRef.current = true
-    if (hasSavedCheckin(checkin)) {
+    if (checkin && hasSavedCheckin(checkin)) {
       setForm(checkinToForm(checkin))
       if (!editByDefault) setIsEditing(false)
-    } else {
-      setIsEditing(true)
     }
   }, [checkin, date, editByDefault])
 
@@ -165,11 +167,12 @@ export function CheckinEditor({
     onSaved?.()
   }, [date, form, runAchievements, onSaved, editByDefault])
 
-  const isDirty = !formMatchesSaved(form, checkin ?? null)
+  const savedCheckin = checkin && hasSavedCheckin(checkin) ? checkin : null
+  const isDirty = !formMatchesSaved(form, savedCheckin)
   const canSave =
     isEditing &&
     isDirty &&
-    (formHasValue(form) || hasSavedCheckin(checkin))
+    (formHasValue(form) || hasSavedCheckin(savedCheckin))
 
   return (
     <div className={compact ? 'space-y-3' : 'space-y-5'}>
@@ -216,7 +219,7 @@ export function CheckinEditor({
             Save check-in
           </button>
         )}
-        {!isEditing && hasSavedCheckin(checkin) && !editByDefault && (
+        {!isEditing && hasSavedCheckin(savedCheckin) && !editByDefault && (
           <button
             type="button"
             onClick={() => setIsEditing(true)}
