@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ChevronDown, ChevronUp, History } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ChevronDown, ChevronUp, History, Pencil } from 'lucide-react'
 import { db, getSettings } from '../lib/db'
 import { formatDisplayDate } from '../lib/dates'
 import { isDayCompliant, countOnPlanMeals } from '../lib/compliance'
 import { Card } from './Card'
 import { SectionHeader } from './SectionHeader'
 import { PhotoThumbnail } from './MealPhotoUpload'
+import { CheckinEditor } from './CheckinEditor'
 import type { Checkin } from '../lib/db'
 import type { MealSlot } from '../lib/mealSlots'
 import { formatSlotLabel } from '../lib/mealSlots'
@@ -40,7 +42,7 @@ export function CheckinHistory({ weightUnit, today }: CheckinHistoryProps) {
           title="History log"
           subtitle="Past check-ins appear here"
         />
-        <p className="text-center text-sm font-medium text-muted py-4">
+        <p className="py-4 text-center text-sm font-medium text-muted">
           No check-ins saved yet.
         </p>
       </Card>
@@ -52,7 +54,7 @@ export function CheckinHistory({ weightUnit, today }: CheckinHistoryProps) {
       <SectionHeader
         icon={<History size={18} strokeWidth={2.25} />}
         title="History log"
-        subtitle={`${checkins.length} saved`}
+        subtitle={`${checkins.length} saved · tap to expand & edit`}
       />
       <div className="space-y-2">
         {checkins.map((c) => (
@@ -86,35 +88,49 @@ function HistoryRow({
   expanded: boolean
   onToggle: () => void
 }) {
+  const navigate = useNavigate()
+
   return (
     <div className="overflow-hidden rounded-2xl bg-surface-muted/60">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left"
-      >
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-foreground">
-            {formatDisplayDate(checkin.date)}
-          </p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            {checkin.weight != null && (
-              <span className="text-xs font-semibold text-muted">
-                {checkin.weight} {weightUnit}
-              </span>
-            )}
-            <RatingDots label="E" value={checkin.energy} color={RATING_COLORS.energy} />
-            <RatingDots label="C" value={checkin.cravings} color={RATING_COLORS.cravings} />
-            <RatingDots label="M" value={checkin.mood} color={RATING_COLORS.mood} />
+      <div className="flex items-center gap-2 px-2 py-2">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 items-center gap-3 px-2 py-1 text-left"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-foreground">
+              {formatDisplayDate(checkin.date)}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {checkin.weight != null && (
+                <span className="text-xs font-semibold text-muted">
+                  {checkin.weight} {weightUnit}
+                </span>
+              )}
+              <RatingDots label="E" value={checkin.energy} color={RATING_COLORS.energy} />
+              <RatingDots label="C" value={checkin.cravings} color={RATING_COLORS.cravings} />
+              <RatingDots label="M" value={checkin.mood} color={RATING_COLORS.mood} />
+            </div>
           </div>
-        </div>
-        {expanded ? (
-          <ChevronUp size={18} className="shrink-0 text-muted" />
-        ) : (
-          <ChevronDown size={18} className="shrink-0 text-muted" />
-        )}
-      </button>
-      {expanded && <DayDetail date={checkin.date} checkin={checkin} weightUnit={weightUnit} />}
+          {expanded ? (
+            <ChevronUp size={18} className="shrink-0 text-muted" />
+          ) : (
+            <ChevronDown size={18} className="shrink-0 text-muted" />
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate(`/?date=${checkin.date}`)}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-muted shadow-sm"
+          aria-label="Edit day log"
+        >
+          <Pencil size={15} />
+        </button>
+      </div>
+      {expanded && (
+        <DayDetail date={checkin.date} checkin={checkin} weightUnit={weightUnit} />
+      )}
     </div>
   )
 }
@@ -149,6 +165,8 @@ function DayDetail({
   checkin: Checkin
   weightUnit: string
 }) {
+  const navigate = useNavigate()
+
   const detail = useLiveQuery(async () => {
     const settings = await getSettings()
     const meals = await db.meals.where('date').equals(date).toArray()
@@ -160,7 +178,6 @@ function DayDetail({
 
     return {
       settings,
-      meals,
       exercise,
       photos,
       mealMap,
@@ -168,19 +185,17 @@ function DayDetail({
       onPlan,
       totalSlots: settings.mealSlots.length,
     }
-  }, [date])
+  }, [date, checkin.weight, checkin.energy, checkin.cravings, checkin.mood])
 
   if (!detail) return null
 
   const { settings, exercise, photos, mealMap, compliant, onPlan, totalSlots } = detail
 
   return (
-    <div className="border-t border-white/60 px-4 pb-4 pt-3 space-y-3">
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <DetailStat label="Weight" value={checkin.weight != null ? `${checkin.weight} ${weightUnit}` : '—'} />
-        <DetailStat label="Energy" value={checkin.energy?.toString() ?? '—'} />
-        <DetailStat label="Cravings" value={checkin.cravings?.toString() ?? '—'} />
-        <DetailStat label="Mood" value={checkin.mood?.toString() ?? '—'} />
+    <div className="space-y-3 border-t border-white/60 px-4 pb-4 pt-3">
+      <div>
+        <p className="mb-2 text-xs font-bold text-foreground">Edit check-in</p>
+        <CheckinEditor date={date} weightUnit={weightUnit} compact />
       </div>
 
       <div className="rounded-xl bg-white/70 px-3 py-2">
@@ -233,15 +248,14 @@ function DayDetail({
           </div>
         </div>
       )}
-    </div>
-  )
-}
 
-function DetailStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-white/70 px-2 py-1.5">
-      <p className="text-[10px] font-medium text-muted">{label}</p>
-      <p className="text-sm font-bold text-foreground">{value}</p>
+      <button
+        type="button"
+        onClick={() => navigate(`/?date=${date}`)}
+        className="w-full min-h-[44px] rounded-full bg-accent text-sm font-bold text-foreground shadow-sm"
+      >
+        Edit meals & exercise
+      </button>
     </div>
   )
 }

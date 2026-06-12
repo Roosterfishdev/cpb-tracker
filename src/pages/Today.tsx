@@ -1,9 +1,18 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Pencil, MoreHorizontal } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { Pencil, MoreHorizontal, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { db, upsertMeal, upsertExercise, upsertDayNotes, ensureSeeded } from '../lib/db'
-import { todayKey, getLastNDays } from '../lib/dates'
+import {
+  todayKey,
+  getLastNDays,
+  keyToDate,
+  shiftDateKey,
+  clampToToday,
+  formatShortDate,
+  isTodayKey,
+  isValidDateKey,
+} from '../lib/dates'
 import {
   getDayNumber,
   getPhaseForDay,
@@ -18,7 +27,6 @@ import { CircularGauge } from '../components/CircularGauge'
 import { Card } from '../components/Card'
 import { evaluateAchievements, getAchievementById } from '../lib/achievements'
 import { useToastStore } from '../store/toastStore'
-import { format } from 'date-fns'
 
 function useDebouncedSave(value: string, onSave: (v: string) => void, delay = 500) {
   useEffect(() => {
@@ -28,10 +36,27 @@ function useDebouncedSave(value: string, onSave: (v: string) => void, delay = 50
 }
 
 export function TodayPage() {
-  const today = todayKey()
+  const calendarToday = todayKey()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const dateParam = searchParams.get('date')
+  const selectedDate = clampToToday(
+    dateParam && isValidDateKey(dateParam) ? dateParam : calendarToday,
+  )
+  const viewingToday = isTodayKey(selectedDate)
+
   const showToast = useToastStore((s) => s.show)
   const navigate = useNavigate()
   const notesRef = useRef<HTMLTextAreaElement>(null)
+  const dateInputRef = useRef<HTMLInputElement>(null)
+
+  const setSelectedDate = (key: string) => {
+    const clamped = clampToToday(key)
+    if (isTodayKey(clamped)) {
+      setSearchParams({})
+    } else {
+      setSearchParams({ date: clamped })
+    }
+  }
 
   const settings = useLiveQuery(async () => {
     await ensureSeeded()
@@ -39,32 +64,33 @@ export function TodayPage() {
   })
 
   const meals = useLiveQuery(
-    () => db.meals.where('date').equals(today).toArray(),
-    [today],
+    () => db.meals.where('date').equals(selectedDate).toArray(),
+    [selectedDate],
   )
 
   const dayRecord = useLiveQuery(
-    () => db.days.get(today),
-    [today],
+    () => db.days.get(selectedDate),
+    [selectedDate],
   )
 
   const exercise = useLiveQuery(
-    () => db.exercise.where('date').equals(today).first(),
-    [today],
+    () => db.exercise.where('date').equals(selectedDate).first(),
+    [selectedDate],
   )
 
   const weeklyExerciseCount = useLiveQuery(async () => {
     const keys = getLastNDays(7)
     const records = await db.exercise.where('date').anyOf(keys).toArray()
     return records.filter((r) => r.didExercise).length
-  }, [today])
+  }, [calendarToday])
 
   const [notes, setNotes] = useState('')
   const [showNotes, setShowNotes] = useState(false)
 
   useEffect(() => {
     setNotes(dayRecord?.notes ?? '')
-  }, [dayRecord?.notes, today])
+    setShowNotes(!!dayRecord?.notes)
+  }, [dayRecord?.notes, selectedDate])
 
   const runAchievements = useCallback(async () => {
     const earned = await evaluateAchievements()
@@ -76,28 +102,28 @@ export function TodayPage() {
 
   const saveNotes = useCallback(
     async (v: string) => {
-      await upsertDayNotes(today, v)
+      await upsertDayNotes(selectedDate, v)
       await runAchievements()
     },
-    [today, runAchievements],
+    [selectedDate, runAchievements],
   )
 
   useDebouncedSave(notes, saveNotes)
 
   const handleMealUpdate = useCallback(
     async (slotId: string, updates: Parameters<typeof upsertMeal>[2]) => {
-      await upsertMeal(today, slotId, updates)
+      await upsertMeal(selectedDate, slotId, updates)
       await runAchievements()
     },
-    [today, runAchievements],
+    [selectedDate, runAchievements],
   )
 
   const handleExerciseUpdate = useCallback(
     async (data: Parameters<typeof upsertExercise>[1]) => {
-      await upsertExercise(today, data)
+      await upsertExercise(selectedDate, data)
       await runAchievements()
     },
-    [today, runAchievements],
+    [selectedDate, runAchievements],
   )
 
   const focusNotes = () => {
@@ -113,7 +139,8 @@ export function TodayPage() {
     )
   }
 
-  const dayNumber = getDayNumber(settings.startDate)
+  const selectedAsDate = keyToDate(selectedDate)
+  const dayNumber = getDayNumber(settings.startDate, selectedAsDate)
   const phase = getPhaseForDay(dayNumber)
   const allowedFoods = getAllowedFoods(dayNumber)
   const daysRemaining = getDaysRemainingInPhase(dayNumber)
@@ -124,18 +151,73 @@ export function TodayPage() {
     mealMap,
   )
 
-  const datePill = format(new Date(), 'MMM d')
+  const canGoForward = !viewingToday
 
   return (
     <div className="space-y-5 px-5 pb-6 pt-4">
+      {!viewingToday && (
+        <div className="flex items-center justify-between rounded-2xl bg-pastel-amber/40 px-4 py-2.5">
+          <p className="text-sm font-semibold text-foreground">
+            Editing {formatShortDate(selectedDate)}
+          </p>
+          <button
+            type="button"
+            onClick={() => setSearchParams({})}
+            className="rounded-full bg-surface px-3 py-1 text-xs font-bold text-foreground shadow-sm"
+          >
+            Back to today
+          </button>
+        </div>
+      )}
+
       <header className="relative flex items-center justify-between">
-        <span className="rounded-full bg-surface px-3.5 py-1.5 text-xs font-bold text-foreground shadow-card">
-          Today · {datePill}
-        </span>
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => setSelectedDate(shiftDateKey(selectedDate, -1))}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-surface text-muted shadow-card"
+            aria-label="Previous day"
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <button
+            type="button"
+            onClick={() => dateInputRef.current?.showPicker?.() ?? dateInputRef.current?.click()}
+            className="rounded-full bg-surface px-3 py-1.5 text-xs font-bold text-foreground shadow-card"
+          >
+            {viewingToday ? `Today · ${formatShortDate(selectedDate)}` : formatShortDate(selectedDate)}
+          </button>
+          <input
+            ref={dateInputRef}
+            type="date"
+            value={selectedDate}
+            max={calendarToday}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="sr-only"
+            aria-label="Pick date"
+          />
+          <button
+            type="button"
+            disabled={!canGoForward}
+            onClick={() => setSelectedDate(shiftDateKey(selectedDate, 1))}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-surface text-muted shadow-card disabled:opacity-30"
+            aria-label="Next day"
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
         <h1 className="absolute left-1/2 -translate-x-1/2 text-base font-extrabold text-foreground">
           CPB Tracker
         </h1>
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => dateInputRef.current?.showPicker?.() ?? dateInputRef.current?.click()}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-surface text-muted shadow-card"
+            aria-label="Pick date"
+          >
+            <Calendar size={16} />
+          </button>
           <button
             type="button"
             onClick={focusNotes}
@@ -176,7 +258,7 @@ export function TodayPage() {
       />
 
       <MealsCard
-        date={today}
+        date={selectedDate}
         mealSlots={settings.mealSlots}
         meals={mealMap}
         onUpdate={handleMealUpdate}
@@ -188,7 +270,7 @@ export function TodayPage() {
         onUpdate={handleExerciseUpdate}
       />
 
-      {(showNotes || notes) && (
+      {(showNotes || notes || !viewingToday) && (
         <Card>
           <h2 className="mb-3 text-base font-bold text-foreground">Notes</h2>
           <textarea
@@ -196,7 +278,7 @@ export function TodayPage() {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
-            placeholder="How did today go?"
+            placeholder="How did this day go?"
             className="w-full resize-none rounded-2xl bg-surface-muted px-4 py-3 text-sm font-medium text-foreground outline-none placeholder:text-muted"
           />
         </Card>
