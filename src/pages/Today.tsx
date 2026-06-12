@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useState, useRef } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Pencil, MoreHorizontal, ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
+import { Pencil, MoreHorizontal, ChevronLeft, ChevronRight, Calendar, Scale } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { db, upsertMeal, upsertExercise, upsertDayNotes, ensureSeeded } from '../lib/db'
 import {
@@ -25,6 +25,8 @@ import { MealsCard } from '../components/MealRow'
 import { ExerciseCard } from '../components/ExerciseCard'
 import { CircularGauge } from '../components/CircularGauge'
 import { Card } from '../components/Card'
+import { SectionHeader } from '../components/SectionHeader'
+import { CheckinEditor } from '../components/CheckinEditor'
 import { evaluateAchievements, getAchievementById } from '../lib/achievements'
 import { useToastStore } from '../store/toastStore'
 
@@ -269,6 +271,22 @@ export function TodayPage() {
         weeklyCount={weeklyExerciseCount ?? 0}
         onUpdate={handleExerciseUpdate}
       />
+
+      {!viewingToday && (
+        <Card>
+          <SectionHeader
+            icon={<Scale size={18} strokeWidth={2.25} />}
+            title="Check-in"
+            subtitle="Weight & wellbeing for this day"
+          />
+          <CheckinEditor
+            date={selectedDate}
+            weightUnit={settings.weightUnit}
+            startInEditMode
+            onSaved={runAchievements}
+          />
+        </Card>
+      )}
 
       {(showNotes || notes || !viewingToday) && (
         <Card>

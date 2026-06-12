@@ -195,7 +195,7 @@ function DayDetail({
     <div className="space-y-3 border-t border-white/60 px-4 pb-4 pt-3">
       <div>
         <p className="mb-2 text-xs font-bold text-foreground">Edit check-in</p>
-        <CheckinEditor date={date} weightUnit={weightUnit} compact />
+        <CheckinEditor date={date} weightUnit={weightUnit} compact startInEditMode />
       </div>
 
       <div className="rounded-xl bg-white/70 px-3 py-2">

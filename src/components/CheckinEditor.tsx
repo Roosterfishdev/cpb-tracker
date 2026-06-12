@@ -44,6 +44,24 @@ export function hasSavedCheckin(c?: {
   return c.weight != null || c.energy != null || c.cravings != null || c.mood != null
 }
 
+export function formMatchesSaved(
+  form: CheckinForm,
+  c?: {
+    weight?: number
+    energy?: 1 | 2 | 3 | 4 | 5
+    cravings?: 1 | 2 | 3 | 4 | 5
+    mood?: 1 | 2 | 3 | 4 | 5
+  } | null,
+): boolean {
+  const saved = checkinToForm(c ?? undefined)
+  return (
+    form.weight === saved.weight &&
+    form.energy === saved.energy &&
+    form.cravings === saved.cravings &&
+    form.mood === saved.mood
+  )
+}
+
 interface RatingSelectorProps {
   label: string
   value?: number
@@ -85,33 +103,45 @@ interface CheckinEditorProps {
   date: string
   weightUnit: string
   compact?: boolean
+  /** When true, fields start editable and Save appears after changes */
+  startInEditMode?: boolean
   onSaved?: () => void
 }
 
-export function CheckinEditor({ date, weightUnit, compact, onSaved }: CheckinEditorProps) {
+export function CheckinEditor({
+  date,
+  weightUnit,
+  compact,
+  startInEditMode,
+  onSaved,
+}: CheckinEditorProps) {
   const showToast = useToastStore((s) => s.show)
   const checkin = useLiveQuery(() => db.checkins.get(date), [date])
 
+  const editByDefault = startInEditMode ?? compact ?? false
+
   const [form, setForm] = useState<CheckinForm>({ weight: '' })
-  const [isEditing, setIsEditing] = useState(true)
+  const [isEditing, setIsEditing] = useState(editByDefault)
   const [savedFlash, setSavedFlash] = useState(false)
   const loadedRef = useRef(false)
 
   useEffect(() => {
     loadedRef.current = false
     setForm({ weight: '' })
-    setIsEditing(true)
+    setIsEditing(editByDefault)
     setSavedFlash(false)
-  }, [date])
+  }, [date, editByDefault])
 
   useEffect(() => {
     if (checkin === undefined || loadedRef.current) return
     loadedRef.current = true
     if (hasSavedCheckin(checkin)) {
       setForm(checkinToForm(checkin))
-      setIsEditing(false)
+      if (!editByDefault) setIsEditing(false)
+    } else {
+      setIsEditing(true)
     }
-  }, [checkin, date])
+  }, [checkin, date, editByDefault])
 
   const runAchievements = useCallback(async () => {
     const earned = await evaluateAchievements()
@@ -129,13 +159,17 @@ export function CheckinEditor({ date, weightUnit, compact, onSaved }: CheckinEdi
       mood: form.mood,
     })
     await runAchievements()
-    setIsEditing(false)
+    if (!editByDefault) setIsEditing(false)
     setSavedFlash(true)
     setTimeout(() => setSavedFlash(false), 2000)
     onSaved?.()
-  }, [date, form, runAchievements, onSaved])
+  }, [date, form, runAchievements, onSaved, editByDefault])
 
-  const canSave = isEditing && formHasValue(form)
+  const isDirty = !formMatchesSaved(form, checkin ?? null)
+  const canSave =
+    isEditing &&
+    isDirty &&
+    (formHasValue(form) || hasSavedCheckin(checkin))
 
   return (
     <div className={compact ? 'space-y-3' : 'space-y-5'}>
@@ -182,7 +216,7 @@ export function CheckinEditor({ date, weightUnit, compact, onSaved }: CheckinEdi
             Save check-in
           </button>
         )}
-        {!isEditing && hasSavedCheckin(checkin) && (
+        {!isEditing && hasSavedCheckin(checkin) && !editByDefault && (
           <button
             type="button"
             onClick={() => setIsEditing(true)}
@@ -190,6 +224,9 @@ export function CheckinEditor({ date, weightUnit, compact, onSaved }: CheckinEdi
           >
             Edit
           </button>
+        )}
+        {isEditing && isDirty && !canSave && (
+          <p className="text-xs font-medium text-muted">Add at least one value to save</p>
         )}
       </div>
       {savedFlash && (
